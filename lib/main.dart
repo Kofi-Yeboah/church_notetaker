@@ -128,17 +128,17 @@ class _NoteListScreenState extends State<NoteListScreen> {
         if (note == null) {
           _notes.add(result);
         } else {
-          int index = _notes.indexWhere((n) => n.id == note.id);
-          _notes[index] = result;
+          final int index = _notes.indexWhere((n) => n.id == note.id);
+          if (index != -1) _notes[index] = result;
         }
       });
       _saveNotes();
     }
   }
 
-  void _deleteNote(int index) {
+  void _deleteNote(String id) {
     setState(() {
-      _notes.removeAt(_notes.length - 1 - index);
+      _notes.removeWhere((n) => n.id == id);
     });
     _saveNotes();
   }
@@ -162,7 +162,7 @@ class _NoteListScreenState extends State<NoteListScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  onLongPress: () => _deleteNote(index),
+                  onLongPress: () => _deleteNote(note.id),
                   onTap: () => _openEditor(note: note),
                 );
               },
@@ -327,6 +327,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               content: block.content,
               onDelete: () {
                 setState(() {
+                  _blocks[blockIndex].controller?.dispose();
                   _blocks.removeAt(blockIndex);
                 });
               },
@@ -361,7 +362,7 @@ class VerseCallout extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.indigo.withOpacity(0.05),
+        color: Colors.indigo.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: const Border(
           left: BorderSide(color: Colors.indigo, width: 5),
@@ -382,10 +383,10 @@ class VerseCallout extends StatelessWidget {
           ),
           Text(
             content,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontStyle: FontStyle.italic,
-              color: Colors.black87,
+              color: Theme.of(context).textTheme.bodyMedium?.color,
             ),
           ),
         ],
@@ -405,6 +406,12 @@ class _BiblePickerSheetState extends State<BiblePickerSheet> {
   final TextEditingController _searchController = TextEditingController();
   String _result = '';
   bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _searchVerse() async {
     if (_searchController.text.isEmpty) return;
