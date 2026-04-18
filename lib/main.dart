@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const ChurchNotesApp());
@@ -33,6 +34,16 @@ class NoteBlock {
       controller = TextEditingController(text: content);
     }
   }
+
+  Map<String, dynamic> toJson() => {
+        'content': content,
+        'isVerse': isVerse,
+      };
+
+  factory NoteBlock.fromJson(Map<String, dynamic> json) => NoteBlock(
+        content: json['content'],
+        isVerse: json['isVerse'],
+      );
 }
 
 class Note {
@@ -51,6 +62,24 @@ class Note {
     required this.blocks,
     required this.date,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'preacher': preacher,
+        'sermonDate': sermonDate.toIso8601String(),
+        'blocks': blocks.map((b) => b.toJson()).toList(),
+        'date': date.toIso8601String(),
+      };
+
+  factory Note.fromJson(Map<String, dynamic> json) => Note(
+        id: json['id'],
+        title: json['title'],
+        preacher: json['preacher'],
+        sermonDate: DateTime.parse(json['sermonDate']),
+        blocks: (json['blocks'] as List).map((b) => NoteBlock.fromJson(b)).toList(),
+        date: DateTime.parse(json['date']),
+      );
 }
 
 class NoteListScreen extends StatefulWidget {
@@ -61,7 +90,30 @@ class NoteListScreen extends StatefulWidget {
 }
 
 class _NoteListScreenState extends State<NoteListScreen> {
-  final List<Note> _notes = [];
+  List<Note> _notes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotes();
+  }
+
+  Future<void> _loadNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? notesJson = prefs.getString('notes');
+    if (notesJson != null) {
+      final List<dynamic> decoded = json.decode(notesJson);
+      setState(() {
+        _notes = decoded.map((item) => Note.fromJson(item)).toList();
+      });
+    }
+  }
+
+  Future<void> _saveNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded = json.encode(_notes.map((note) => note.toJson()).toList());
+    await prefs.setString('notes', encoded);
+  }
 
   void _openEditor({Note? note}) async {
     final result = await Navigator.push(
@@ -80,7 +132,15 @@ class _NoteListScreenState extends State<NoteListScreen> {
           _notes[index] = result;
         }
       });
+      _saveNotes();
     }
+  }
+
+  void _deleteNote(int index) {
+    setState(() {
+      _notes.removeAt(_notes.length - 1 - index);
+    });
+    _saveNotes();
   }
 
   @override
@@ -102,6 +162,7 @@ class _NoteListScreenState extends State<NoteListScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  onLongPress: () => _deleteNote(index),
                   onTap: () => _openEditor(note: note),
                 );
               },
@@ -136,7 +197,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _selectedDate = widget.note?.sermonDate ?? DateTime.now();
     
     if (widget.note != null) {
-      // Clone blocks from existing note
       _blocks = widget.note!.blocks.map((b) => NoteBlock(content: b.content, isVerse: b.isVerse)).toList();
     } else {
       _blocks = [NoteBlock(content: '')];
@@ -162,9 +222,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
     if (verse != null) {
       setState(() {
-        // Add the verse as a new block
         _blocks.add(NoteBlock(content: verse, isVerse: true));
-        // Add a new empty text block after the verse to continue typing
         _blocks.add(NoteBlock(content: ''));
       });
     }
@@ -184,7 +242,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           IconButton(
             icon: const Icon(Icons.check),
             onPressed: () {
-              // Sync controllers back to content
               for (var block in _blocks) {
                 if (block.controller != null) {
                   block.content = block.controller!.text;
@@ -206,7 +263,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16.0),
-        itemCount: _blocks.length + 1, // +1 for the header section
+        itemCount: _blocks.length + 1,
         itemBuilder: (context, index) {
           if (index == 0) {
             return Column(
